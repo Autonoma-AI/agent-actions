@@ -25,7 +25,7 @@ inputs:
     description: URL to receive a webhook notification when analysis completes.
     required: false
   webhook-headers:
-    description: JSON object of additional headers to include in the webhook request (e.g. '{"Authorization": "Bearer token"}').
+    description: JSON object of additional headers to include in the webhook request.
     required: false
 
 outputs:
