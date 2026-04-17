@@ -21,6 +21,12 @@ inputs:
   environment:
     description: Deployment environment name (e.g. staging, production).
     required: false
+  webhook-url:
+    description: URL to receive a webhook notification when analysis completes.
+    required: false
+  webhook-headers:
+    description: JSON object of additional headers to include in the webhook request.
+    required: false
 
 outputs:
   branch-id:
@@ -64,6 +70,8 @@ runs:
         PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
         DEPLOY_URL: ${{ inputs.url }}
         ENVIRONMENT: ${{ inputs.environment }}
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        WEBHOOK_HEADERS: ${{ inputs.webhook-headers }}
       run: |
         BODY=$(jq -n \
           --argjson repo_id "${REPO_ID}" \
@@ -73,6 +81,14 @@ runs:
 
         if [ -n "${ENVIRONMENT}" ]; then
           BODY=$(echo "${BODY}" | jq --arg env "${ENVIRONMENT}" '. + {environment: $env}')
+        fi
+
+        if [ -n "${WEBHOOK_URL}" ]; then
+          BODY=$(echo "${BODY}" | jq --arg webhook_url "${WEBHOOK_URL}" '. + {webhook_url: $webhook_url}')
+        fi
+
+        if [ -n "${WEBHOOK_HEADERS}" ]; then
+          BODY=$(echo "${BODY}" | jq --argjson webhook_headers "${WEBHOOK_HEADERS}" '. + {webhook_headers: $webhook_headers}')
         fi
 
         HTTP_RESPONSE=$(mktemp)
