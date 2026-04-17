@@ -17,7 +17,7 @@ inputs:
   autonoma-api-url:
     description: Autonoma API base URL (e.g. https://api.agent.autonoma.app).
     required: false
-    default: https://api.agent.autonoma.app
+    default: https://agent.autonoma.app
   environment:
     description: Deployment environment name (e.g. staging, production).
     required: false
