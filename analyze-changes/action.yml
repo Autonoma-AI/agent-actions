@@ -5,6 +5,9 @@ inputs:
   sha:
     description: The commit SHA to analyze.
     required: true
+  ref:
+    description: The git ref the commit belongs to (e.g. "main", "feature/foo", or "refs/heads/main"). Used to dispatch between PR and main-branch flows server-side.
+    required: true
   url:
     description: The deployment URL to test against.
     required: true
@@ -17,7 +20,7 @@ inputs:
   autonoma-api-url:
     description: Autonoma API base URL (e.g. https://api.agent.autonoma.app).
     required: false
-    default: https://api.agent.autonoma.app
+    default: https://agent.autonoma.app
   environment:
     description: Deployment environment name (e.g. staging, production).
     required: false
@@ -50,15 +53,14 @@ runs:
         COMMIT_SHA: ${{ inputs.sha }}
         GH_REPO: ${{ github.repository }}
       run: |
-        PR_NUMBER=$(gh api "repos/${GH_REPO}/commits/${COMMIT_SHA}/pulls" --jq '.[0].number')
+        PR_NUMBER=$(gh api "repos/${GH_REPO}/commits/${COMMIT_SHA}/pulls" --jq '.[0].number // empty')
 
-        if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-          echo "::error::No pull request found for commit ${COMMIT_SHA}"
-          exit 1
+        if [ -n "${PR_NUMBER}" ]; then
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Found PR #${PR_NUMBER} for commit ${COMMIT_SHA}"
+        else
+          echo "No pull request found for commit ${COMMIT_SHA}; will trigger as a non-PR ref"
         fi
-
-        echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-        echo "Found PR #${PR_NUMBER} for commit ${COMMIT_SHA}"
 
     - name: Trigger diff analysis
       id: trigger
@@ -68,16 +70,25 @@ runs:
         AUTONOMA_API_URL: ${{ inputs.autonoma-api-url }}
         REPO_ID: ${{ github.repository_id }}
         PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
+        REF: ${{ inputs.ref }}
+        HEAD_SHA: ${{ inputs.sha }}
         DEPLOY_URL: ${{ inputs.url }}
         ENVIRONMENT: ${{ inputs.environment }}
         WEBHOOK_URL: ${{ inputs.webhook-url }}
         WEBHOOK_HEADERS: ${{ inputs.webhook-headers }}
       run: |
+        GITHUB_REF_NAME="${REF#refs/heads/}"
+
         BODY=$(jq -n \
           --argjson repo_id "${REPO_ID}" \
-          --argjson pr_number "${PR_NUMBER}" \
+          --arg github_ref "${GITHUB_REF_NAME}" \
+          --arg head_sha "${HEAD_SHA}" \
           --arg url "${DEPLOY_URL}" \
-          '{repo_id: $repo_id, pr_number: $pr_number, url: $url}')
+          '{repo_id: $repo_id, github_ref: $github_ref, head_sha: $head_sha, url: $url}')
+
+        if [ -n "${PR_NUMBER}" ]; then
+          BODY=$(echo "${BODY}" | jq --argjson pr_number "${PR_NUMBER}" '. + {pr_number: $pr_number}')
+        fi
 
         if [ -n "${ENVIRONMENT}" ]; then
           BODY=$(echo "${BODY}" | jq --arg env "${ENVIRONMENT}" '. + {environment: $env}')
